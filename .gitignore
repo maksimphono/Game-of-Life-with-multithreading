@@ -1,0 +1,12 @@
+.vscode/
+.vs/
+.DS_Store
+*.o
+*.d
+*.asm
+life
+life-asan
+life-tsan
+conf/info.mk
+*.pdf
+*.zip
