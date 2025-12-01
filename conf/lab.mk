@@ -1,2 +1,2 @@
 LAB=life-parallel
-LAB_NUM=2
+LAB_NUM=4
