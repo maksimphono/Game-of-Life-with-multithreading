@@ -42,7 +42,7 @@ void* worker_function(void* args) {
     int range[2] = {arguments->range[0], arguments->range[1]};
 
 forever: // this loop will run forever, barrier will control it, when basically on each step of the game, barrier will wait for all threads to come and wait for all of them to finish their respective slice of the job
-    
+    // TODO: use 2 barriers here to wait for all threads to get ready first, then for all threads to finish
 
     goto forever;
 }
@@ -71,8 +71,10 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
         return;
     }
 
-    for (int step = 0; step < steps; step++) {
+    init_workers(next_state, state, workers, threads);
 
+    for (int step = 0; step < steps; step++) {
+        // TODO: perform main logic of synchronization with barriers here
         swap(next_state, state);
     }
 }
