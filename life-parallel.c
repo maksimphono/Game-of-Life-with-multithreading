@@ -27,13 +27,13 @@ void barrier_wait(barrier_t *b) {
     }
     b->arrived++;
     if (b->arrived == b->total) {
-        printf("Barrier %c arrived: %d/%d, get to work\n", b->name, b->arrived, b->total);
+        //printf("Barrier %c arrived: %d/%d, get to work\n", b->name, b->arrived, b->total);
         fflush(stdout);
         b->arrived = 0;
         b->generation++;
         pthread_cond_broadcast(&b->cv);
     } else {
-        printf("Barrier %c arrived: %d/%d\n", b->name, b->arrived, b->total);
+        //printf("Barrier %c arrived: %d/%d\n", b->name, b->arrived, b->total);
         fflush(stdout);
         while (gen == b->generation)
             pthread_cond_wait(&b->cv, &b->m);
@@ -91,10 +91,6 @@ typedef struct {
     boolean terminated;
 } worker_arguments_t;
 
-//pthread_barrier_t start_barrier;
-
-//pthread_barrier_waitksks(start_barrier);
-
 void* worker_function(void* args) {
     // this function is a start for each thread, each thread will run infinite loop here
     worker_arguments_t* arguments = (worker_arguments_t*)args;
@@ -106,16 +102,14 @@ void* worker_function(void* args) {
         // TODO: use 2 barriers here to wait for all threads to get ready first, then for all threads to finish
         // barrier 1
 
-        //puts("");
-        fflush(stdout);
         barrier_wait(&start_barrier);
 
         if (arguments->terminated) {
             break; // stop worker
         }
-        //pthread_mutex_unlock(&term_lock);
 
         calculate_slice(next_state, old_state, range);
+
         // barrier 2
         barrier_wait(&finish_barrier);
     }
@@ -129,7 +123,6 @@ void init_workers(LifeBoard* next_state, LifeBoard *state, pthread_t workers[], 
     int range_length = board_size / workers_num;
     int range[2] = {};
     args_arr = (worker_arguments_t*)malloc(sizeof(worker_arguments_t) * workers_num);
-    //void* args = malloc(sizeof(worker_arguments_t));
     int i = 0;
     for (; i < workers_num - 1; i++) {
         // TODO: calculate start of the range, respecting the borders (borders must be 0 always)
@@ -165,8 +158,6 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     while (step < steps) {
         // TODO: perform main logic of synchronization with barriers here
 
-        //puts("L");
-        //fflush(stdout);
         // barrier 1
         barrier_wait(&start_barrier);
 
@@ -176,12 +167,6 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
         swap(next_state, state);
         step++;
     }
-    //puts("Loop finihsed");
-    //fflush(stdout);
-
-    //pthread_mutex_lock(&term_lock);
-    //terminated = True;
-    //pthread_mutex_unlock(&term_lock);
 
     for (int i = 0; i < threads; i++)
         args_arr[i].terminated = True;
