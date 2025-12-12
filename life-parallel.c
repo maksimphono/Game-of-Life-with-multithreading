@@ -2,7 +2,6 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdlib.h>
-#include <stdatomic.h>
 
 typedef enum {False, True} boolean;
 
@@ -74,8 +73,6 @@ void calculate_slice(LifeBoard* next_state, LifeBoard* old_state, int range[2]) 
     int y = 0;
     int x = 0;
     LifeCell next_cell = 0;
-    //puts("Slice");
-    //fflush(stdout);
 
     for (int i = range[START]; i < range[END]; i++) {
         y = i / old_state->width;
@@ -91,7 +88,7 @@ typedef struct {
     LifeBoard* next_state;
     LifeBoard* old_state;
     int range[2];
-    atomic_bool terminated;
+    boolean terminated;
 } worker_arguments_t;
 
 //pthread_barrier_t start_barrier;
@@ -113,7 +110,7 @@ void* worker_function(void* args) {
         fflush(stdout);
         barrier_wait(&start_barrier);
 
-        if (atomic_load(&arguments->terminated)) {
+        if (arguments->terminated) {
             break; // stop worker
         }
         //pthread_mutex_unlock(&term_lock);
@@ -138,13 +135,13 @@ void init_workers(LifeBoard* next_state, LifeBoard *state, pthread_t workers[], 
         // TODO: calculate start of the range, respecting the borders (borders must be 0 always)
         range[START] = i * range_length;
         range[END] = range[START] + range_length;
-        worker_arguments_t args = {next_state, state, {range[0], range[1]}, ATOMIC_VAR_INIT(False)};
+        worker_arguments_t args = {next_state, state, {range[0], range[1]}, False};
         args_arr[i] = args;
         pthread_create(&workers[i], NULL, worker_function, (void*)(args_arr + i));
     }
     range[START] = i * range_length;
     range[END] = board_size;
-    worker_arguments_t args = {next_state, state, {range[0], range[1]}, ATOMIC_VAR_INIT(False)};
+    worker_arguments_t args = {next_state, state, {range[0], range[1]}, False};
     args_arr[i] = args;
     pthread_create(&workers[workers_num - 1], NULL, worker_function, (void*)(args_arr + i));
 }
@@ -152,7 +149,7 @@ void init_workers(LifeBoard* next_state, LifeBoard *state, pthread_t workers[], 
 void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     // TODO: implement this with multithreading
     if (steps == 0) return;
-    int step;
+    int step = 0;
     LifeBoard *next_state = create_life_board(state->width, state->height);
     pthread_t workers[threads];
     if (next_state == NULL) {
@@ -165,12 +162,7 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     barrier_init(&finish_barrier, threads + 1, 'F');
     init_workers(next_state, state, workers, threads);
 
-    pthread_mutex_lock(&term_lock);
-    step = 0;
-    pthread_mutex_unlock(&term_lock);
-
-    //exit(0);
-    while (1) {
+    while (step < steps) {
         // TODO: perform main logic of synchronization with barriers here
 
         //puts("L");
@@ -181,14 +173,8 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
         // barrier 2
         barrier_wait(&finish_barrier);
 
-        pthread_mutex_lock(&term_lock);
         swap(next_state, state);
         step++;
-        if (step >= steps) {
-            pthread_mutex_unlock(&term_lock);
-            break;
-        }
-        pthread_mutex_unlock(&term_lock);
     }
     //puts("Loop finihsed");
     //fflush(stdout);
@@ -198,7 +184,7 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     //pthread_mutex_unlock(&term_lock);
 
     for (int i = 0; i < threads; i++)
-        atomic_store(&args_arr[i].terminated, True);
+        args_arr[i].terminated = True;
 
     // Let workers wake up from start_barrier
     barrier_wait(&start_barrier);
