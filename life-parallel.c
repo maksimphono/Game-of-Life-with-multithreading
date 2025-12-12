@@ -1,7 +1,6 @@
 #include "life.h"
 #include <pthread.h>
 #include <semaphore.h>
-#include <stdlib.h>
 
 typedef enum {False, True} boolean;
 
@@ -17,24 +16,27 @@ typedef struct {
     char name;
 } barrier_t;
 
+typedef struct {
+    LifeBoard* next_state;
+    LifeBoard* old_state;
+    int range[2];
+    boolean terminated;
+} worker_arguments_t;
+
 void barrier_wait(barrier_t *b) {
     pthread_mutex_lock(&b->m);
     int gen = b->generation;
 
-    if (b->name == '\0') {
-        pthread_mutex_unlock(&b->m);
-        return;
-    }
     b->arrived++;
     if (b->arrived == b->total) {
         //printf("Barrier %c arrived: %d/%d, get to work\n", b->name, b->arrived, b->total);
-        fflush(stdout);
+        //fflush(stdout);
         b->arrived = 0;
         b->generation++;
         pthread_cond_broadcast(&b->cv);
     } else {
         //printf("Barrier %c arrived: %d/%d\n", b->name, b->arrived, b->total);
-        fflush(stdout);
+        //fflush(stdout);
         while (gen == b->generation)
             pthread_cond_wait(&b->cv, &b->m);
     }
@@ -53,7 +55,6 @@ void barrier_init(barrier_t *b, int total_threads, char name) {
 
 barrier_t start_barrier;
 barrier_t finish_barrier;
-pthread_mutex_t term_lock;
 boolean terminated = False;
 
 
@@ -84,13 +85,6 @@ void calculate_slice(LifeBoard* next_state, LifeBoard* old_state, int range[2]) 
     }
 }
 
-typedef struct {
-    LifeBoard* next_state;
-    LifeBoard* old_state;
-    int range[2];
-    boolean terminated;
-} worker_arguments_t;
-
 void* worker_function(void* args) {
     // this function is a start for each thread, each thread will run infinite loop here
     worker_arguments_t* arguments = (worker_arguments_t*)args;
@@ -100,8 +94,8 @@ void* worker_function(void* args) {
 
     while (1) { // this loop will run forever, barrier will control it, when basically on each step of the game, barrier will wait for all threads to come and wait for all of them to finish their respective slice of the job
         // TODO: use 2 barriers here to wait for all threads to get ready first, then for all threads to finish
-        // barrier 1
 
+        // barrier 1
         barrier_wait(&start_barrier);
 
         if (arguments->terminated) {
@@ -118,6 +112,13 @@ void* worker_function(void* args) {
 
 worker_arguments_t* args_arr;
 
+worker_arguments_t create_worker_arguments(LifeBoard* next_state, LifeBoard *state, int* range) {
+    worker_arguments_t args = {next_state, state, {range[0], range[1]}, False};
+    return args;
+}
+
+
+
 void init_workers(LifeBoard* next_state, LifeBoard *state, pthread_t workers[], int workers_num) {
     int board_size = state->width * state->height;
     int range_length = board_size / workers_num;
@@ -128,13 +129,13 @@ void init_workers(LifeBoard* next_state, LifeBoard *state, pthread_t workers[], 
         // TODO: calculate start of the range, respecting the borders (borders must be 0 always)
         range[START] = i * range_length;
         range[END] = range[START] + range_length;
-        worker_arguments_t args = {next_state, state, {range[0], range[1]}, False};
+        worker_arguments_t args = create_worker_arguments(next_state, state, range);
         args_arr[i] = args;
         pthread_create(&workers[i], NULL, worker_function, (void*)(args_arr + i));
     }
     range[START] = i * range_length;
     range[END] = board_size;
-    worker_arguments_t args = {next_state, state, {range[0], range[1]}, False};
+    worker_arguments_t args = create_worker_arguments(next_state, state, range);;
     args_arr[i] = args;
     pthread_create(&workers[workers_num - 1], NULL, worker_function, (void*)(args_arr + i));
 }
@@ -150,7 +151,7 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
         return;
     }
 
-    pthread_mutex_init(&term_lock, NULL);
+    //pthread_mutex_init(&term_lock, NULL);
     barrier_init(&start_barrier, threads + 1, 'S');
     barrier_init(&finish_barrier, threads + 1, 'F');
     init_workers(next_state, state, workers, threads);
