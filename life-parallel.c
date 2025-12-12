@@ -14,6 +14,7 @@ typedef struct {
     int arrived;
     int total;
     int generation;
+    char name;
 } barrier_t;
 
 void barrier_wait(barrier_t *b) {
@@ -22,10 +23,14 @@ void barrier_wait(barrier_t *b) {
 
     b->arrived++;
     if (b->arrived == b->total) {
+        printf("Barrier %c arrived: %d, get to work\n", b->name, b->arrived, b->total);
+        fflush(stdout);
         b->arrived = 0;
         b->generation++;
         pthread_cond_broadcast(&b->cv);
     } else {
+        printf("Barrier %c arrived: %d, still waiting: %d\n", b->name, b->arrived, b->total);
+        fflush(stdout);
         while (gen == b->generation)
             pthread_cond_wait(&b->cv, &b->m);
     }
@@ -33,12 +38,13 @@ void barrier_wait(barrier_t *b) {
     pthread_mutex_unlock(&b->m);
 }
 
-void barrier_init(barrier_t *b, int total_threads) {
+void barrier_init(barrier_t *b, int total_threads, char name) {
     pthread_mutex_init(&b->m, NULL);
     pthread_cond_init(&b->cv, NULL);
     b->arrived = 0;
     b->total = total_threads;
     b->generation = 0;
+    b->name = name;
 }
 
 barrier_t start_barrier;
@@ -61,6 +67,8 @@ void calculate_slice(LifeBoard* next_state, LifeBoard* old_state, int range[2]) 
     int y = 0;
     int x = 0;
     LifeCell next_cell = 0;
+    puts("Slice");
+    fflush(stdout);
 
     for (int i = range[START]; i < range[END]; i++) {
         y = i / old_state->width;
@@ -76,6 +84,7 @@ typedef struct {
     LifeBoard* next_state;
     LifeBoard* old_state;
     int range[2];
+    boolean terminated;
 } worker_arguments_t;
 
 //pthread_barrier_t start_barrier;
@@ -89,39 +98,46 @@ void* worker_function(void* args) {
     LifeBoard* old_state = arguments->old_state;
     int range[2] = {arguments->range[0], arguments->range[1]};
 
-forever: // this loop will run forever, barrier will control it, when basically on each step of the game, barrier will wait for all threads to come and wait for all of them to finish their respective slice of the job
-    // TODO: use 2 barriers here to wait for all threads to get ready first, then for all threads to finish
+    while (1) { // this loop will run forever, barrier will control it, when basically on each step of the game, barrier will wait for all threads to come and wait for all of them to finish their respective slice of the job
+        // TODO: use 2 barriers here to wait for all threads to get ready first, then for all threads to finish
 
-    // barrier 1
-    barrier_wait(&start_barrier);
+        printf("Worker\n");
+        fflush(stdout);
+        // barrier 1
+        barrier_wait(&start_barrier);
 
-    calculate_slice(next_state, old_state, range);
+        if (arguments->terminated == True) {
+            break; // stop worker
+        }
 
-    // barrier 2
-    barrier_wait(&finish_barrier);
-
-    goto forever;
+        calculate_slice(next_state, old_state, range);
+        // barrier 2
+        barrier_wait(&finish_barrier);
+    }
 }
+
+worker_arguments_t* args_arr;
 
 void init_workers(LifeBoard* next_state, LifeBoard *state, pthread_t workers[], int workers_num) {
     int board_size = state->width * state->height;
     int range_length = board_size / workers_num;
     int range[2] = {};
-    worker_arguments_t* args_arr = (worker_arguments_t*)malloc(sizeof(worker_arguments_t) * workers_num);
+    args_arr = (worker_arguments_t*)malloc(sizeof(worker_arguments_t) * workers_num);
     //void* args = malloc(sizeof(worker_arguments_t));
     int i = 0;
     for (; i < workers_num - 1; i++) {
         // TODO: calculate start of the range, respecting the borders (borders must be 0 always)
         range[START] = i * range_length;
         range[END] = range[START] + range_length;
-        worker_arguments_t args = {next_state, state, range};
+        worker_arguments_t args = {next_state, state, {range[0], range[1]}, False};
         args_arr[i] = args;
-        pthread_create(workers[i], NULL, worker_function, (void*)(args_arr + i));
+        pthread_create(&workers[i], NULL, worker_function, (void*)(args_arr + i));
     }
     range[START] = i * range_length;
     range[END] = board_size;
-    worker_arguments_t args = {next_state, state, range};
-    pthread_create(workers[workers_num - 1], NULL, worker_function, (void*)(&args));
+    worker_arguments_t args = {next_state, state, {range[0], range[1]}, False};
+    args_arr[i] = args;
+    pthread_create(&workers[workers_num - 1], NULL, worker_function, (void*)(args_arr + i));
 }
 
 void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
@@ -134,13 +150,17 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
         return;
     }
 
+    
     init_workers(next_state, state, workers, threads);
-    barrier_init(&start_barrier, threads + 1);
-    barrier_init(&finish_barrier, threads + 1);
+    barrier_init(&start_barrier, threads + 1, 'S');
+    barrier_init(&finish_barrier, threads + 1, 'F');
 
+    puts("qqw");
     for (int step = 0; step < steps; step++) {
         // TODO: perform main logic of synchronization with barriers here
-        
+
+        puts("Loop");
+        fflush(stdout);
         // barrier 1
         barrier_wait(&start_barrier);
 
@@ -149,4 +169,19 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
         
         swap(next_state, state);
     }
+    puts("Loop finihsed");
+    fflush(stdout);
+
+    for (int i = 0; i < threads; i++)
+        args_arr[i].terminated = True;
+
+    // Let workers wake up from start_barrier
+    barrier_wait(&start_barrier);
+
+    // Wait for workers to exit their loop
+    //barrier_wait(&finish_barrier);
+
+    // Now safely join threads
+    for (int i = 0; i < threads; i++)
+        pthread_join(workers[i], NULL);
 }
