@@ -1,6 +1,7 @@
 #include "life.h"
 #include <pthread.h>
 #include <semaphore.h>
+#include <string.h>
 
 typedef enum {False, True} boolean;
 
@@ -21,7 +22,7 @@ typedef struct {
     LifeBoard* old_state;
     int range[2];
     boolean terminated;
-} worker_arguments_t;
+} worker_state_t;
 
 void barrier_wait(barrier_t *b) {
     pthread_mutex_lock(&b->m);
@@ -87,7 +88,7 @@ void calculate_slice(LifeBoard* next_state, LifeBoard* old_state, int range[2]) 
 
 void* worker_function(void* args) {
     // this function is a start for each thread, each thread will run infinite loop here
-    worker_arguments_t* arguments = (worker_arguments_t*)args;
+    worker_state_t* arguments = (worker_state_t*)args;
     LifeBoard* next_state = arguments->next_state;
     LifeBoard* old_state = arguments->old_state;
     int range[2] = {arguments->range[0], arguments->range[1]};
@@ -110,34 +111,57 @@ void* worker_function(void* args) {
     return NULL;
 }
 
-worker_arguments_t* args_arr;
+worker_state_t* args_arr;
 
-worker_arguments_t create_worker_arguments(LifeBoard* next_state, LifeBoard *state, int* range) {
-    worker_arguments_t args = {next_state, state, {range[0], range[1]}, False};
+worker_state_t create_worker_arguments(LifeBoard* next_state, LifeBoard *state, int* range) {
+    worker_state_t args = {next_state, state, {range[0], range[1]}, False};
     return args;
 }
 
+struct {
+    pthread_t* workers;
+    worker_state_t* states;
+    int length;
+} worker_list;
+
+worker_state_t create_worker(LifeBoard* next_state, LifeBoard *state, int range_start, int range_end){
+    worker_state_t worker_state = {next_state, state, {range_start, range_end}, False};
+    worker_list.states[worker_list.length] = worker_state;
+    //printf("size: %d", sizeof(worker_list.workers));
+    pthread_create(&worker_list.workers[worker_list.length], NULL, worker_function, (void*)(worker_list.states + worker_list.length));
+    worker_list.length += 1;
+    return worker_state;
+}
 
 
-void init_workers(LifeBoard* next_state, LifeBoard *state, pthread_t workers[], int workers_num) {
+void init_workers(LifeBoard* next_state, LifeBoard *state, pthread_t* workers, int workers_num) {
     int board_size = state->width * state->height;
     int range_length = board_size / workers_num;
-    int range[2] = {};
-    args_arr = (worker_arguments_t*)malloc(sizeof(worker_arguments_t) * workers_num);
     int i = 0;
+    //int range[2] = {};
+    //puts("qwe");
+    worker_list.workers = workers;
+    worker_list.states = (worker_state_t*)malloc(sizeof(worker_state_t) * workers_num);
+    worker_list.length = 0;
+    for (int i = 0; i < workers_num; i++){
+        printf("Worker: %d\n", worker_list.workers[i]);
+    }
+
     for (; i < workers_num - 1; i++) {
         // TODO: calculate start of the range, respecting the borders (borders must be 0 always)
-        range[START] = i * range_length;
-        range[END] = range[START] + range_length;
-        worker_arguments_t args = create_worker_arguments(next_state, state, range);
-        args_arr[i] = args;
-        pthread_create(&workers[i], NULL, worker_function, (void*)(args_arr + i));
+        create_worker(next_state, state, i * range_length, i * range_length + range_length);
+        //range[START] = i * range_length;
+        //range[END] = range[START] + range_length;
+        //worker_state_t args = create_worker_arguments(next_state, state, range);
+        //args_arr[i] = args;
+        //pthread_create(&workers[i], NULL, worker_function, (void*)(args_arr + i));
     }
-    range[START] = i * range_length;
-    range[END] = board_size;
-    worker_arguments_t args = create_worker_arguments(next_state, state, range);;
-    args_arr[i] = args;
-    pthread_create(&workers[workers_num - 1], NULL, worker_function, (void*)(args_arr + i));
+    create_worker(next_state, state, i * range_length, board_size);
+    //range[START] = i * range_length;
+    //range[END] = board_size;
+    //worker_state_t args = create_worker_arguments(next_state, state, range);;
+    //args_arr[i] = args;
+    //pthread_create(&workers[workers_num - 1], NULL, worker_function, (void*)(args_arr + i));
 }
 
 void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
@@ -145,7 +169,8 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     if (steps == 0) return;
     int step = 0;
     LifeBoard *next_state = create_life_board(state->width, state->height);
-    pthread_t workers[threads];
+    pthread_t* workers = (pthread_t*)malloc(sizeof(pthread_t) * threads);
+    memset(workers, 0, threads);
     if (next_state == NULL) {
         fprintf(stderr, "Failed to allocate memory for next state.\n");
         return;
@@ -170,7 +195,7 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     }
 
     for (int i = 0; i < threads; i++)
-        args_arr[i].terminated = True;
+        worker_list.states[i].terminated = True;
 
     // Let workers wake up from start_barrier
     barrier_wait(&start_barrier);
