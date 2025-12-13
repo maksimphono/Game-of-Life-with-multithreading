@@ -3,6 +3,7 @@
 #include <semaphore.h>
 
 typedef enum {False, True} boolean;
+typedef enum {Horizontal, Vertical} axis_t;
 
 #define START 0
 #define END 1
@@ -22,6 +23,7 @@ typedef struct {
     int start_row;
     int end_row;
     boolean terminated;
+    axis_t processing_axis;
 } worker_state_t;
 
 /*
@@ -63,6 +65,7 @@ void gate_init(gate_t *b, int total_threads, char name) {
 gate_t start_gate;
 gate_t finish_gate;
 worker_list_t workers_list;
+axis_t processing_axis = Horizontal;
 
 LifeCell create_next_cell(LifeBoard *state, int x, int y) {
     int live_neighbors = count_live_neighbors(state, x, y);
@@ -79,22 +82,38 @@ void calculate_slice(LifeBoard* next_board, LifeBoard* old_board, int start_row,
     // will be used by each thread to perform calculations on it's assigned slice
     LifeCell next_cell = 0;
 
-    for (int y = start_row; y < end_row; y++) {
-        for (int x = 1; x < old_board->width - 1; x++) {
-            next_cell = create_next_cell(old_board, x, y);
-            set_at(next_board, x, y, next_cell);
+    switch (processing_axis) {
+    case Horizontal:
+        for (int y = start_row; y < end_row; y++) {
+            for (int x = 1; x < old_board->width - 1; x++) {
+                next_cell = create_next_cell(old_board, x, y);
+                set_at(next_board, x, y, next_cell);
+            }
         }
+        return;
+    case Vertical:
+        for (int x = start_row; x < end_row; x++) {
+            for (int y = 1; y < old_board->height - 1; y++) {
+                next_cell = create_next_cell(old_board, x, y);
+                set_at(next_board, x, y, next_cell);
+            }
+        }
+        return;
     }
 }
 
+// TODO: implement new idea with distributing workload according to vertical or horizontal axis
 void* worker_function(void* state) {
     // this function is a start for each thread, each thread will run infinite loop here
     worker_state_t* worker_state = (worker_state_t*)state;
     LifeBoard* next_board = worker_state->next_board;
     LifeBoard* old_board = worker_state->old_board;
 
-    while (1) { // this loop will run forever, gate will control it, when basically on each step of the game, gate will wait for all threads to come and wait for all of them to finish their respective slice of the job
-        // TODO: use 2 gates here to wait for all threads to get ready first, then for all threads to finish
+    // this loop will run forever, gate will control it, 
+    // when basically on each step of the game, 
+    // gate will wait for all threads to come and wait 
+    // for all of them to finish their respective slice of the job
+    while (1) { 
 
         gate_wait(&start_gate);
 
@@ -115,7 +134,14 @@ void* worker_function(void* state) {
 }
 
 worker_state_t create_worker(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int start_row, int end_row){
-    worker_state_t worker_state = {next_board, state, start_row, end_row, False};
+    worker_state_t worker_state = {
+        next_board, 
+        state, 
+        start_row, 
+        end_row, 
+        False, 
+        Horizontal
+    };
     worker_list->states[worker_list->length] = worker_state;
     pthread_create(&worker_list->workers[worker_list->length], NULL, worker_function, (void*)(worker_list->states + worker_list->length));
     worker_list->length += 1;
@@ -133,13 +159,31 @@ void join_workers(worker_list_t* worker_list) {
     }
 }
 
+// TODO: distribute work more evenly by redistributing the rest of rows/columns to workers
 void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int workers_num) {
-    int rows_per_worker = (state->height - 2) / workers_num;
+    int rows_number = (state->height - 2);
+    int columns_number = (state->width - 2);
+    int rows_per_worker;
 
     worker_list->workers = (pthread_t*)malloc(sizeof(pthread_t) * workers_num);
     worker_list->states = (worker_state_t*)malloc(sizeof(worker_state_t) * workers_num);
     worker_list->length = 0;
 
+    if (rows_number >= workers_num && (rows_number % workers_num == 0 || rows_number > columns_number)){
+        // process horizontally (each worker processes set of rows)
+        processing_axis = Horizontal;
+        rows_per_worker = rows_number / workers_num;
+    } else 
+    if (columns_number >= workers_num && (columns_number % workers_num == 0 || columns_number > rows_number)){
+        // process vertically (each worker processes set of columns)
+        processing_axis = Vertical;
+        rows_per_worker = columns_number / workers_num;
+    }
+
+    //printf("Axis detected: %d\n", processing_axis);
+    //fflush(stdout);
+    //processing_axis = Horizontal;
+    //rows_per_worker = rows_number / workers_num;
     int i = 0;
     for (; i < workers_num - 1; i++) {
         // TODO: calculate start of the range, respecting the borders (borders must be 0 always)
@@ -157,7 +201,7 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
         next_board, 
         state, 
         1 + i * rows_per_worker, 
-        state->height - 1
+        (processing_axis == Horizontal?state->height:state->width) - 1
     );
 }
 
