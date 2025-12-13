@@ -74,10 +74,6 @@ LifeCell create_next_cell(LifeBoard *state, int x, int y) {
     
 }
 
-boolean is_border(LifeBoard* board, int x, int y) {
-    return (x <= 0) || (x >= board->width - 1) || (y <= 0) || (y >= board->height - 1);
-}
-
 void calculate_slice(LifeBoard* next_board, LifeBoard* old_board, int start_row, int end_row) {
     // will be used by each thread to perform calculations on it's assigned slice
     LifeCell next_cell = 0;
@@ -102,7 +98,6 @@ void calculate_slice(LifeBoard* next_board, LifeBoard* old_board, int start_row,
     }
 }
 
-// TODO: implement new idea with distributing workload according to vertical or horizontal axis
 void* worker_function(void* state) {
     // this function is a start for each thread, each thread will run infinite loop here
     worker_state_t* worker_state = (worker_state_t*)state;
@@ -159,12 +154,11 @@ void join_workers(worker_list_t* worker_list) {
     }
 }
 
-// TODO: distribute work more evenly by redistributing the rest of rows/columns to workers
 void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int workers_num) {
     int rows_number = (state->height - 2);
     int columns_number = (state->width - 2);
-    int rows_per_worker;
-    int reminder;
+    int rows_per_worker = 1;
+    int reminder = 0;
 
     worker_list->workers = (pthread_t*)malloc(sizeof(pthread_t) * workers_num);
     worker_list->states = (worker_state_t*)malloc(sizeof(worker_state_t) * workers_num);
@@ -186,7 +180,6 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
     int i = 0;
     int last_row = 1;
     for (; i < workers_num; i++) {
-        // TODO: calculate start of the range, respecting the borders (borders must be 0 always)
         if (i < reminder) {
             create_worker(
                 worker_list, 
@@ -194,8 +187,6 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
                 state,
                 last_row,
                 last_row + rows_per_worker + 1
-                //1 + i * (rows_per_worker + 1), 
-                //1 + i * (rows_per_worker + 1) + rows_per_worker + 1
             );
             last_row += rows_per_worker + 1;
         } else {
@@ -209,7 +200,6 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
             last_row += rows_per_worker;
         }
     }
-    // last worker is responsible for the last slice, that could be bigger than others
     /*
     printf("Rem: %d\n", reminder);
     puts("Workers load:");
@@ -220,9 +210,36 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
     */
 }
 
+void simulate_life_serial(LifeBoard *state, int steps) {
+    if (steps == 0) return;
+    LifeBoard *next_state = create_life_board(state->width, state->height);
+    if (next_state == NULL) {
+        fprintf(stderr, "Failed to allocate memory for next state.\n");
+        return;
+    }
+    for (int step = 0; step < steps; step++) {
+        for (int y = 1; y < state->height - 1; y++) {
+            for (int x = 1; x < state->width - 1; x++) {
+                int live_neighbors = count_live_neighbors(state, x, y);
+                LifeCell current_cell = at(state, x, y);
+                LifeCell new_cell = (live_neighbors == 3) || (live_neighbors == 4 && current_cell == 1) ? 1 : 0;
+                set_at(next_state, x, y, new_cell);
+            }
+        }
+        swap(state, next_state);
+    }
+    destroy_life_board(next_state);
+}
+
 void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     // TODO: implement this with multithreading
     if (steps == 0) return;
+    if (state->width - 2 < threads && state->height - 2 < threads) {
+        // the board is too small, thread creation will introduce overhead -> just do it with serial
+        simulate_life_serial(state, steps);
+        return;
+    }
+
     int step = 0;
     LifeBoard *next_board = create_life_board(state->width, state->height);
     if (next_board == NULL) {
@@ -230,13 +247,11 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
         return;
     }
 
-    //pthread_mutex_init(&term_lock, NULL);
     gate_init(&start_gate, threads + 1, 'S');
     gate_init(&finish_gate, threads + 1, 'F');
     init_workers(&workers_list, next_board, state, threads);
 
     while (step < steps) {
-        // TODO: perform main logic of synchronization with gates here
 
         // gate 1
         gate_wait(&start_gate);
@@ -254,4 +269,6 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     gate_wait(&start_gate);
 
     join_workers(&workers_list);
+
+    destroy_life_board(next_board);
 }
