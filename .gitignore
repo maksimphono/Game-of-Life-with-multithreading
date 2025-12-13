@@ -12,3 +12,6 @@ conf/info.mk
 *.zip
 results/*
 input/*
+main
+parallel
+serial
