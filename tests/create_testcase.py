@@ -2,7 +2,7 @@
 from random import random
 from os import path
 
-width = 10003
+width = 10006
 height = 18
 file_name = "10003x18"
 threshold = 0.7

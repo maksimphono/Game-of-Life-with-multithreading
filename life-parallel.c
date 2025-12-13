@@ -164,6 +164,7 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
     int rows_number = (state->height - 2);
     int columns_number = (state->width - 2);
     int rows_per_worker;
+    int reminder;
 
     worker_list->workers = (pthread_t*)malloc(sizeof(pthread_t) * workers_num);
     worker_list->states = (worker_state_t*)malloc(sizeof(worker_state_t) * workers_num);
@@ -173,36 +174,50 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
         // process horizontally (each worker processes set of rows)
         processing_axis = Horizontal;
         rows_per_worker = rows_number / workers_num;
+        reminder = rows_number % workers_num;
     } else 
     if (columns_number >= workers_num && (columns_number % workers_num == 0 || columns_number > rows_number)){
         // process vertically (each worker processes set of columns)
         processing_axis = Vertical;
         rows_per_worker = columns_number / workers_num;
+        reminder = columns_number % workers_num;
     }
 
-    //printf("Axis detected: %d\n", processing_axis);
-    //fflush(stdout);
-    //processing_axis = Horizontal;
-    //rows_per_worker = rows_number / workers_num;
     int i = 0;
-    for (; i < workers_num - 1; i++) {
+    int last_row = 1;
+    for (; i < workers_num; i++) {
         // TODO: calculate start of the range, respecting the borders (borders must be 0 always)
-        create_worker(
-            worker_list, 
-            next_board, 
-            state, 
-            1 + i * rows_per_worker, 
-            1 + i * rows_per_worker + rows_per_worker
-        );
+        if (i < reminder) {
+            create_worker(
+                worker_list, 
+                next_board, 
+                state,
+                last_row,
+                last_row + rows_per_worker + 1
+                //1 + i * (rows_per_worker + 1), 
+                //1 + i * (rows_per_worker + 1) + rows_per_worker + 1
+            );
+            last_row += rows_per_worker + 1;
+        } else {
+            create_worker(
+                worker_list, 
+                next_board, 
+                state, 
+                last_row, 
+                last_row + rows_per_worker
+            );
+            last_row += rows_per_worker;
+        }
     }
     // last worker is responsible for the last slice, that could be bigger than others
-    create_worker(
-        worker_list, 
-        next_board, 
-        state, 
-        1 + i * rows_per_worker, 
-        (processing_axis == Horizontal?state->height:state->width) - 1
-    );
+    /*
+    printf("Rem: %d\n", reminder);
+    puts("Workers load:");
+    for (int i = 0; i < worker_list->length; i++) {
+        printf("%d: %d\n", i, worker_list->states[i].end_row - worker_list->states[i].start_row);
+    }
+    fflush(stdout);
+    */
 }
 
 void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
