@@ -1,7 +1,6 @@
 #include "life.h"
 #include <pthread.h>
 #include <semaphore.h>
-#include <string.h>
 
 typedef enum {False, True} boolean;
 
@@ -15,7 +14,7 @@ typedef struct {
     int total;
     int generation;
     char name;
-} barrier_t;
+} gate_t;
 
 typedef struct {
     LifeBoard* next_board;
@@ -34,20 +33,16 @@ typedef struct {
     int length;
 } worker_list_t;
 
-void barrier_wait(barrier_t *b) {
+void gate_wait(gate_t *b) {
     pthread_mutex_lock(&b->m);
     int gen = b->generation;
 
     b->arrived++;
     if (b->arrived == b->total) {
-        //printf("Barrier %c arrived: %d/%d, get to work\n", b->name, b->arrived, b->total);
-        //fflush(stdout);
         b->arrived = 0;
         b->generation++;
         pthread_cond_broadcast(&b->cv);
     } else {
-        //printf("Barrier %c arrived: %d/%d\n", b->name, b->arrived, b->total);
-        //fflush(stdout);
         while (gen == b->generation)
             pthread_cond_wait(&b->cv, &b->m);
     }
@@ -55,7 +50,7 @@ void barrier_wait(barrier_t *b) {
     pthread_mutex_unlock(&b->m);
 }
 
-void barrier_init(barrier_t *b, int total_threads, char name) {
+void gate_init(gate_t *b, int total_threads, char name) {
     pthread_mutex_init(&b->m, NULL);
     pthread_cond_init(&b->cv, NULL);
     b->arrived = 0;
@@ -64,8 +59,8 @@ void barrier_init(barrier_t *b, int total_threads, char name) {
     b->name = name;
 }
 
-barrier_t start_barrier;
-barrier_t finish_barrier;
+gate_t start_gate;
+gate_t finish_gate;
 worker_list_t workers_list;
 
 LifeCell create_next_cell(LifeBoard *state, int x, int y) {
@@ -101,10 +96,10 @@ void* worker_function(void* state) {
     LifeBoard* next_board = worker_state->next_board;
     LifeBoard* old_board = worker_state->old_board;
 
-    while (1) { // this loop will run forever, barrier will control it, when basically on each step of the game, barrier will wait for all threads to come and wait for all of them to finish their respective slice of the job
-        // TODO: use 2 barriers here to wait for all threads to get ready first, then for all threads to finish
+    while (1) { // this loop will run forever, gate will control it, when basically on each step of the game, gate will wait for all threads to come and wait for all of them to finish their respective slice of the job
+        // TODO: use 2 gates here to wait for all threads to get ready first, then for all threads to finish
 
-        barrier_wait(&start_barrier);
+        gate_wait(&start_gate);
 
         if (worker_state->terminated) {
             break; // stop worker
@@ -112,7 +107,7 @@ void* worker_function(void* state) {
 
         calculate_slice(next_board, old_board, worker_state->range);
 
-        barrier_wait(&finish_barrier);
+        gate_wait(&finish_gate);
     }
     return NULL;
 }
@@ -125,14 +120,14 @@ worker_state_t create_worker(worker_list_t* worker_list, LifeBoard* next_board, 
     return worker_state;
 }
 
-void terminate_workers(worker_list_t worker_list) {
-    for (int i = 0; i < worker_list.length; i++)
-        worker_list.states[i].terminated = True;
+void terminate_workers(worker_list_t* worker_list) {
+    for (int i = 0; i < worker_list->length; i++)
+        worker_list->states[i].terminated = True;
 }
 
-void join_workers(worker_list_t worker_list) {
-    for (int i = 0; i < worker_list.length; i++) {
-        pthread_join(worker_list.workers[i], NULL);
+void join_workers(worker_list_t* worker_list) {
+    for (int i = 0; i < worker_list->length; i++) {
+        pthread_join(worker_list->workers[i], NULL);
     }
 }
 
@@ -164,27 +159,27 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     }
 
     //pthread_mutex_init(&term_lock, NULL);
-    barrier_init(&start_barrier, threads + 1, 'S');
-    barrier_init(&finish_barrier, threads + 1, 'F');
+    gate_init(&start_gate, threads + 1, 'S');
+    gate_init(&finish_gate, threads + 1, 'F');
     init_workers(&workers_list, next_board, state, threads);
 
     while (step < steps) {
-        // TODO: perform main logic of synchronization with barriers here
+        // TODO: perform main logic of synchronization with gates here
 
-        // barrier 1
-        barrier_wait(&start_barrier);
+        // gate 1
+        gate_wait(&start_gate);
 
-        // barrier 2
-        barrier_wait(&finish_barrier);
+        // gate 2
+        gate_wait(&finish_gate);
 
         swap(next_board, state);
         step++;
     }
 
-    terminate_workers(workers_list);
+    terminate_workers(&workers_list);
 
-    // Let workers wake up from start_barrier
-    barrier_wait(&start_barrier);
+    // Let workers wake up from start_gate
+    gate_wait(&start_gate);
 
-    join_workers(workers_list);
+    join_workers(&workers_list);
 }

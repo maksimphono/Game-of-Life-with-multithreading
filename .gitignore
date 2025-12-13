@@ -10,3 +10,5 @@ life-tsan
 conf/info.mk
 *.pdf
 *.zip
+results/*
+input/*

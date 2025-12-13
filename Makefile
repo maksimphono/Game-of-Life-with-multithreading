@@ -44,6 +44,13 @@ life-tsan: main-tsan.o life-tsan.o life-parallel-tsan.o life-serial-tsan.o
 clean:
 	rm -f *.o life life-asan life-tsan
 
+parallel:
+	gcc ./main.c ./life.c ./life-parallel.c -o parallel
+
+serial:
+	gcc ./main.c ./life.c ./life-serial.c -o serial
+
+
 STYLE=\033[1;31m
 NC=\033[0m
 
