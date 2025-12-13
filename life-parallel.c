@@ -19,7 +19,8 @@ typedef struct {
 typedef struct {
     LifeBoard* next_board;
     LifeBoard* old_board;
-    int range[2];
+    int start_row;
+    int end_row;
     boolean terminated;
 } worker_state_t;
 
@@ -74,16 +75,12 @@ boolean is_border(LifeBoard* board, int x, int y) {
     return (x <= 0) || (x >= board->width - 1) || (y <= 0) || (y >= board->height - 1);
 }
 
-void calculate_slice(LifeBoard* next_board, LifeBoard* old_board, int range[2]) {
+void calculate_slice(LifeBoard* next_board, LifeBoard* old_board, int start_row, int end_row) {
     // will be used by each thread to perform calculations on it's assigned slice
-    int y = 0;
-    int x = 0;
     LifeCell next_cell = 0;
 
-    for (int i = range[START]; i < range[END]; i++) {
-        y = i / old_board->width;
-        x = i % old_board->width;
-        if (is_border(old_board, x, y) == False) {
+    for (int y = start_row; y < end_row; y++) {
+        for (int x = 1; x < old_board->width - 1; x++) {
             next_cell = create_next_cell(old_board, x, y);
             set_at(next_board, x, y, next_cell);
         }
@@ -105,15 +102,20 @@ void* worker_function(void* state) {
             break; // stop worker
         }
 
-        calculate_slice(next_board, old_board, worker_state->range);
+        calculate_slice(
+            next_board, 
+            old_board, 
+            worker_state->start_row, 
+            worker_state->end_row
+        );
 
         gate_wait(&finish_gate);
     }
     return NULL;
 }
 
-worker_state_t create_worker(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int range_start, int range_end){
-    worker_state_t worker_state = {next_board, state, {range_start, range_end}, False};
+worker_state_t create_worker(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int start_row, int end_row){
+    worker_state_t worker_state = {next_board, state, start_row, end_row, False};
     worker_list->states[worker_list->length] = worker_state;
     pthread_create(&worker_list->workers[worker_list->length], NULL, worker_function, (void*)(worker_list->states + worker_list->length));
     worker_list->length += 1;
@@ -132,8 +134,7 @@ void join_workers(worker_list_t* worker_list) {
 }
 
 void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int workers_num) {
-    int board_size = state->width * state->height;
-    int range_length = board_size / workers_num;
+    int rows_per_worker = (state->height - 2) / workers_num;
 
     worker_list->workers = (pthread_t*)malloc(sizeof(pthread_t) * workers_num);
     worker_list->states = (worker_state_t*)malloc(sizeof(worker_state_t) * workers_num);
@@ -142,10 +143,22 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
     int i = 0;
     for (; i < workers_num - 1; i++) {
         // TODO: calculate start of the range, respecting the borders (borders must be 0 always)
-        create_worker(worker_list, next_board, state, i * range_length, i * range_length + range_length);
+        create_worker(
+            worker_list, 
+            next_board, 
+            state, 
+            1 + i * rows_per_worker, 
+            1 + i * rows_per_worker + rows_per_worker
+        );
     }
     // last worker is responsible for the last slice, that could be bigger than others
-    create_worker(worker_list, next_board, state, i * range_length, board_size);
+    create_worker(
+        worker_list, 
+        next_board, 
+        state, 
+        1 + i * rows_per_worker, 
+        state->height - 1
+    );
 }
 
 void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
