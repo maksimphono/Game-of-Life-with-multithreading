@@ -24,6 +24,10 @@ typedef struct {
     boolean terminated;
 } worker_state_t;
 
+/*
+* Special abstract data staructure, that represents list of worker threads and 
+* their states for easy access and manipulation
+*/
 typedef struct {
     pthread_t* workers; // threads themselves
     worker_state_t* states; // workers states (will be passed to werker function as arguments)
@@ -62,7 +66,7 @@ void barrier_init(barrier_t *b, int total_threads, char name) {
 
 barrier_t start_barrier;
 barrier_t finish_barrier;
-worker_list_t workers;
+worker_list_t workers_list;
 
 LifeCell create_next_cell(LifeBoard *state, int x, int y) {
     int live_neighbors = count_live_neighbors(state, x, y);
@@ -100,7 +104,6 @@ void* worker_function(void* state) {
     while (1) { // this loop will run forever, barrier will control it, when basically on each step of the game, barrier will wait for all threads to come and wait for all of them to finish their respective slice of the job
         // TODO: use 2 barriers here to wait for all threads to get ready first, then for all threads to finish
 
-        // barrier 1
         barrier_wait(&start_barrier);
 
         if (worker_state->terminated) {
@@ -109,7 +112,6 @@ void* worker_function(void* state) {
 
         calculate_slice(next_board, old_board, worker_state->range);
 
-        // barrier 2
         barrier_wait(&finish_barrier);
     }
     return NULL;
@@ -118,7 +120,6 @@ void* worker_function(void* state) {
 worker_state_t create_worker(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int range_start, int range_end){
     worker_state_t worker_state = {next_board, state, {range_start, range_end}, False};
     worker_list->states[worker_list->length] = worker_state;
-    //printf("size: %d", sizeof(worker_list->workers));
     pthread_create(&worker_list->workers[worker_list->length], NULL, worker_function, (void*)(worker_list->states + worker_list->length));
     worker_list->length += 1;
     return worker_state;
@@ -138,16 +139,17 @@ void join_workers(worker_list_t worker_list) {
 void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int workers_num) {
     int board_size = state->width * state->height;
     int range_length = board_size / workers_num;
-    int i = 0;
 
     worker_list->workers = (pthread_t*)malloc(sizeof(pthread_t) * workers_num);
     worker_list->states = (worker_state_t*)malloc(sizeof(worker_state_t) * workers_num);
     worker_list->length = 0;
 
+    int i = 0;
     for (; i < workers_num - 1; i++) {
         // TODO: calculate start of the range, respecting the borders (borders must be 0 always)
         create_worker(worker_list, next_board, state, i * range_length, i * range_length + range_length);
     }
+    // last worker is responsible for the last slice, that could be bigger than others
     create_worker(worker_list, next_board, state, i * range_length, board_size);
 }
 
@@ -164,7 +166,7 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     //pthread_mutex_init(&term_lock, NULL);
     barrier_init(&start_barrier, threads + 1, 'S');
     barrier_init(&finish_barrier, threads + 1, 'F');
-    init_workers(&workers, next_board, state, threads);
+    init_workers(&workers_list, next_board, state, threads);
 
     while (step < steps) {
         // TODO: perform main logic of synchronization with barriers here
@@ -179,14 +181,10 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
         step++;
     }
 
-    terminate_workers(workers);
+    terminate_workers(workers_list);
 
     // Let workers wake up from start_barrier
     barrier_wait(&start_barrier);
 
-    // Wait for workers to exit their loop
-    //barrier_wait(&finish_barrier);
-
-    // Now safely join threads
-    join_workers(workers);
+    join_workers(workers_list);
 }
