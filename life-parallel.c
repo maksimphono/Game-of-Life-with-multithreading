@@ -22,7 +22,6 @@ typedef struct {
     LifeBoard* old_board;
     int start_row;
     int end_row;
-    boolean terminated;
 } worker_state_t;
 
 /*
@@ -33,6 +32,8 @@ typedef struct {
     pthread_t* workers; // threads themselves
     worker_state_t* states; // workers states (will be passed to werker function as arguments)
     int length;
+    boolean terminated;
+    pthread_mutex_t term_mutex;
 } worker_list_t;
 
 void gate_wait(gate_t *b) {
@@ -116,7 +117,7 @@ void* worker_function(void* state) {
 
         gate_wait(&start_gate);
 
-        if (worker_state->terminated) {
+        if (workers_list.terminated) {
             break; // stop worker
         }
 
@@ -137,8 +138,7 @@ worker_state_t create_worker(worker_list_t* worker_list, LifeBoard* next_board, 
         next_board, 
         state, 
         start_row, 
-        end_row, 
-        False
+        end_row,
     };
     worker_list->states[worker_list->length] = worker_state;
     pthread_create(&worker_list->workers[worker_list->length], NULL, worker_function, (void*)(worker_list->states + worker_list->length));
@@ -152,9 +152,14 @@ void destroy_workers(worker_list_t* worker_list) {
 }
 
 void terminate_workers(worker_list_t* worker_list) {
+    pthread_mutex_lock(&worker_list->term_mutex);
+    worker_list->terminated = True;
+    pthread_mutex_unlock(&worker_list->term_mutex);
+    /*
     for (int i = 0; i < worker_list->length; i++) {
         worker_list->states[i].terminated = True;
     }
+    */
 }
 
 void join_workers(worker_list_t* worker_list) {
@@ -172,6 +177,7 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
     worker_list->workers = (pthread_t*)malloc(sizeof(pthread_t) * workers_num);
     worker_list->states = (worker_state_t*)malloc(sizeof(worker_state_t) * workers_num);
     worker_list->length = 0;
+    worker_list->terminated = False;
 
     if (rows_number >= workers_num && (rows_number % workers_num == 0 || rows_number > columns_number)){
         // process horizontally (each worker processes set of rows)
@@ -209,14 +215,6 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
             last_row += rows_per_worker;
         }
     }
-    /*
-    printf("Rem: %d\n", reminder);
-    puts("Workers load:");
-    for (int i = 0; i < worker_list->length; i++) {
-        printf("%d: %d\n", i, worker_list->states[i].end_row - worker_list->states[i].start_row);
-    }
-    fflush(stdout);
-    */
 }
 
 void my_simulate_life_serial(LifeBoard *state, int steps) {

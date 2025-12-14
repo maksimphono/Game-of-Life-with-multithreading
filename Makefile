@@ -52,7 +52,7 @@ s:
 
 mem:
 	gcc -Wall -Wextra -Werror -pedantic -g ./main.c ./life.c ./life-parallel.c -o parallel_mem
-	valgrind --leak-check=full --show-leak-kinds=all ./parallel_mem 8 ./input/23334m 1> /dev/null 2> valgrind_report.txt
+	valgrind --leak-check=full --show-leak-kinds=all ./parallel_mem 8 ./input/4505x1008 1> /dev/null 2> valgrind_report.txt
 	rm parallel_mem
 
 STYLE=\033[1;31m
