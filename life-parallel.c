@@ -23,7 +23,6 @@ typedef struct {
     int start_row;
     int end_row;
     boolean terminated;
-    axis_t processing_axis;
 } worker_state_t;
 
 /*
@@ -53,13 +52,18 @@ void gate_wait(gate_t *b) {
     pthread_mutex_unlock(&b->m);
 }
 
-void gate_init(gate_t *b, int total_threads, char name) {
+void init_gate(gate_t *b, int total_threads, char name) {
     pthread_mutex_init(&b->m, NULL);
     pthread_cond_init(&b->cv, NULL);
     b->arrived = 0;
     b->total = total_threads;
     b->generation = 0;
     b->name = name;
+}
+
+void destroy_gate(gate_t* gate){
+    pthread_cond_destroy(&gate->cv);
+    pthread_mutex_destroy(&gate->m);
 }
 
 gate_t start_gate;
@@ -134,8 +138,7 @@ worker_state_t create_worker(worker_list_t* worker_list, LifeBoard* next_board, 
         state, 
         start_row, 
         end_row, 
-        False, 
-        Horizontal
+        False
     };
     worker_list->states[worker_list->length] = worker_state;
     pthread_create(&worker_list->workers[worker_list->length], NULL, worker_function, (void*)(worker_list->states + worker_list->length));
@@ -143,9 +146,15 @@ worker_state_t create_worker(worker_list_t* worker_list, LifeBoard* next_board, 
     return worker_state;
 }
 
+void destroy_workers(worker_list_t* worker_list) {
+    free(worker_list->workers);
+    free(worker_list->states);
+}
+
 void terminate_workers(worker_list_t* worker_list) {
-    for (int i = 0; i < worker_list->length; i++)
+    for (int i = 0; i < worker_list->length; i++) {
         worker_list->states[i].terminated = True;
+    }
 }
 
 void join_workers(worker_list_t* worker_list) {
@@ -210,7 +219,7 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
     */
 }
 
-void simulate_life_serial(LifeBoard *state, int steps) {
+void my_simulate_life_serial(LifeBoard *state, int steps) {
     if (steps == 0) return;
     LifeBoard *next_state = create_life_board(state->width, state->height);
     if (next_state == NULL) {
@@ -236,7 +245,7 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
     if (steps == 0) return;
     if (state->width - 2 < threads && state->height - 2 < threads) {
         // the board is too small, thread creation will introduce overhead -> just do it with serial
-        simulate_life_serial(state, steps);
+        my_simulate_life_serial(state, steps);
         return;
     }
 
@@ -247,8 +256,8 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
         return;
     }
 
-    gate_init(&start_gate, threads + 1, 'S');
-    gate_init(&finish_gate, threads + 1, 'F');
+    init_gate(&start_gate, threads + 1, 'S');
+    init_gate(&finish_gate, threads + 1, 'F');
     init_workers(&workers_list, next_board, state, threads);
 
     while (step < steps) {
@@ -270,5 +279,8 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
 
     join_workers(&workers_list);
 
+    destroy_gate(&start_gate);
+    destroy_gate(&finish_gate);
+    destroy_workers(&workers_list);
     destroy_life_board(next_board);
 }

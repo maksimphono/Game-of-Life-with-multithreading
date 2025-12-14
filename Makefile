@@ -44,12 +44,16 @@ life-tsan: main-tsan.o life-tsan.o life-parallel-tsan.o life-serial-tsan.o
 clean:
 	rm -f *.o life life-asan life-tsan
 
-parallel:
-	gcc ./main.c ./life.c ./life-parallel.c -o parallel
+p:
+	gcc -Wall -Wextra -Werror -pedantic ./main.c ./life.c ./life-parallel.c -o parallel
 
-serial:
+s:
 	gcc ./main.c ./life.c ./life-serial.c -o serial
 
+mem:
+	gcc -Wall -Wextra -Werror -pedantic -g ./main.c ./life.c ./life-parallel.c -o parallel_mem
+	valgrind --leak-check=full --show-leak-kinds=all ./parallel_mem 8 ./input/23334m 1> /dev/null 2> valgrind_report.txt
+	rm parallel_mem
 
 STYLE=\033[1;31m
 NC=\033[0m
