@@ -1,8 +1,8 @@
 # Changes 
 
-*** Dec 15 ***
+*** Dec 16 ***
 
-*** Changes to the Lab 4, best score 70.00 ***
+*** Changes to the Lab 4, best score 80.00 ***
 
 ## Terminology
 
@@ -20,12 +20,12 @@ Implemented parallel computation of "Game of life" using multiple threads. Creat
     Each worker is assign it's slice (set of rows) of the board, worker processes only single slice, assigned to it. The worker doesn't perform calculations on the borders, only on the board itself. 
 
 ### Load distribution
-    Board slices are distributed as evenly as possible across workers. Normally, workers will process the board horizontally (so each worker works on it's own set of rows), but if processing the board vertically is more efficient (for example for very wide boards) - workers will switch to vertical board processing. If the board is too small (thread creation will introduce overhead) - serial approach is used instead.
+    Board slices are distributed as evenly as possible across workers (including main thread). Normally, workers will process the board horizontally (so each worker works on it's own set of rows), but if processing the board vertically is more efficient (for example for very wide boards) - workers will switch to vertical board processing. If the board is too small (thread creation will introduce overhead) - serial approach is used instead.
 
 ### Termination
-    Each worker runs infinite loop, where it waits on 2 gates and perform calculations, when `termination` flag becomes set on the worker list, each workers detect it in it's loop and exits. After that main thread will join all workers.
-    
-    
+    Each worker runs infinite loop, where it waits on 2 gates and perform calculations, when `termination` flag becomes set on the worker list, each worker detect it in it's loop and exits. After that main thread will join all workers.
+
+
 ##
 ## Important fucntions
 ##
@@ -37,7 +37,10 @@ Is used by each worker to process it's assigned slice, implementation is very si
 Main function of each worker, here it's logic with waiting on 2 gates and slice pocessing is realized
 
 * `init_workers()`
-Creates all workers including underlying threads and their states, assign slices to workers
+Initializes all workers in the worker list
+
+* `distribute_work`
+Create underlying threads for workers, create their states, assign slices to workers, returns minimum number of slices used by one worker. 
 
 * `simulate_life_parallel()`
 Main logic
