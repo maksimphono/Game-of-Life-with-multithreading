@@ -5,6 +5,8 @@
 typedef enum {False, True} boolean;
 typedef enum {Horizontal, Vertical} axis_t;
 
+#define WORKERS_AND_MAIN(worker_num) (worker_num + 1)
+
 #define START 0
 #define END 1
 
@@ -39,7 +41,7 @@ typedef struct {
 void gate_wait(gate_t *b) {
     pthread_mutex_lock(&b->m);
     int gen = b->generation;
-
+    
     b->arrived++;
     if (b->arrived == b->total) {
         b->arrived = 0;
@@ -168,7 +170,8 @@ void join_workers(worker_list_t* worker_list) {
     }
 }
 
-void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int workers_num) {
+// returns number of rows assigned to first workers
+int init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int workers_num) {
     int rows_number = (state->height - 2);
     int columns_number = (state->width - 2);
     int rows_per_worker = 1;
@@ -179,21 +182,30 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
     worker_list->length = 0;
     worker_list->terminated = False;
 
-    if (rows_number >= workers_num && (rows_number % workers_num == 0 || rows_number > columns_number)){
+    if (rows_number >= WORKERS_AND_MAIN(workers_num) && (rows_number % WORKERS_AND_MAIN(workers_num) == 0 || rows_number > columns_number)){
         // process horizontally (each worker processes set of rows)
         processing_axis = Horizontal;
-        rows_per_worker = rows_number / workers_num;
-        reminder = rows_number % workers_num;
+        rows_per_worker = rows_number / WORKERS_AND_MAIN(workers_num);
+        reminder = rows_number % WORKERS_AND_MAIN(workers_num);
     } else 
-    if (columns_number >= workers_num && (columns_number % workers_num == 0 || columns_number > rows_number)){
+    if (columns_number >= WORKERS_AND_MAIN(workers_num) && (columns_number % WORKERS_AND_MAIN(workers_num) == 0 || columns_number > rows_number)){
         // process vertically (each worker processes set of columns)
         processing_axis = Vertical;
-        rows_per_worker = columns_number / workers_num;
-        reminder = columns_number % workers_num;
+        rows_per_worker = columns_number / WORKERS_AND_MAIN(workers_num);
+        reminder = columns_number % WORKERS_AND_MAIN(workers_num);
     }
 
     int i = 0;
-    int last_row = 1;
+    int last_row = 1 + rows_per_worker; // the first slice will be managed by main
+    //printf("Axis: %d\n", processing_axis);
+    //printf("Main gets: %d, First %d workers gets %d, others %d: %d\n", rows_per_worker, reminder, rows_per_worker + 1, workers_num - reminder, rows_per_worker);
+    /*
+    if (reminder > 0) {
+        last_row = 1 + rows_per_worker + 1; // keep the first slice for main
+        reminder -= 1;
+    }
+    */
+
     for (; i < workers_num; i++) {
         if (i < reminder) {
             create_worker(
@@ -215,6 +227,12 @@ void init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *
             last_row += rows_per_worker;
         }
     }
+    /*
+    for (int i = 0; i < worker_list->length; i++) {
+        printf("Worker: %d processes slice %d-%d\n", i, worker_list->states[i].start_row, worker_list->states[i].end_row);
+    }
+    */
+    return rows_per_worker;
 }
 
 void my_simulate_life_serial(LifeBoard *state, int steps) {
@@ -256,12 +274,24 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
 
     init_gate(&start_gate, threads + 1, 'S');
     init_gate(&finish_gate, threads + 1, 'F');
-    init_workers(&workers_list, next_board, state, threads);
+    int rows_for_main = init_workers(&workers_list, next_board, state, threads);
+    worker_state_t main_worker_state = {next_board, state, 1, 1 + rows_for_main};
 
+    //printf("Main processes slice %d-%d\n", 1, 1 + rows_for_main);
+
+    //exit(0);
     while (step < steps) {
 
         // gate 1
         gate_wait(&start_gate);
+        // TODO: use main thread to perform calculations on the board along with workers
+
+        calculate_slice(
+            next_board, 
+            state, 
+            main_worker_state.start_row, 
+            main_worker_state.end_row
+        );
 
         // gate 2
         gate_wait(&finish_gate);
