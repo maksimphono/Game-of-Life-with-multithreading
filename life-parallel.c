@@ -157,11 +157,6 @@ void terminate_workers(worker_list_t* worker_list) {
     pthread_mutex_lock(&worker_list->term_mutex);
     worker_list->terminated = True;
     pthread_mutex_unlock(&worker_list->term_mutex);
-    /*
-    for (int i = 0; i < worker_list->length; i++) {
-        worker_list->states[i].terminated = True;
-    }
-    */
 }
 
 void join_workers(worker_list_t* worker_list) {
@@ -170,17 +165,22 @@ void join_workers(worker_list_t* worker_list) {
     }
 }
 
-// returns number of rows assigned to first workers
-int init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int workers_num) {
-    int rows_number = (state->height - 2);
-    int columns_number = (state->width - 2);
-    int rows_per_worker = 1;
-    int reminder = 0;
 
+// initializes worker list
+void init_workers(worker_list_t* worker_list, int workers_num) {
     worker_list->workers = (pthread_t*)malloc(sizeof(pthread_t) * workers_num);
     worker_list->states = (worker_state_t*)malloc(sizeof(worker_state_t) * workers_num);
     worker_list->length = 0;
     worker_list->terminated = False;
+}
+
+// Assigns slices to workers and creates threads
+// returns minimum slice size assigned to each worker
+int distribute_work(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *state, int workers_num) {
+    int rows_number = (state->height - 2);
+    int columns_number = (state->width - 2);
+    int rows_per_worker = 1;
+    int reminder = 0;
 
     if (rows_number >= WORKERS_AND_MAIN(workers_num) && (rows_number % WORKERS_AND_MAIN(workers_num) == 0 || rows_number > columns_number)){
         // process horizontally (each worker processes set of rows)
@@ -197,14 +197,6 @@ int init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *s
 
     int i = 0;
     int last_row = 1 + rows_per_worker; // the first slice will be managed by main
-    //printf("Axis: %d\n", processing_axis);
-    //printf("Main gets: %d, First %d workers gets %d, others %d: %d\n", rows_per_worker, reminder, rows_per_worker + 1, workers_num - reminder, rows_per_worker);
-    /*
-    if (reminder > 0) {
-        last_row = 1 + rows_per_worker + 1; // keep the first slice for main
-        reminder -= 1;
-    }
-    */
 
     for (; i < workers_num; i++) {
         if (i < reminder) {
@@ -227,11 +219,6 @@ int init_workers(worker_list_t* worker_list, LifeBoard* next_board, LifeBoard *s
             last_row += rows_per_worker;
         }
     }
-    /*
-    for (int i = 0; i < worker_list->length; i++) {
-        printf("Worker: %d processes slice %d-%d\n", i, worker_list->states[i].start_row, worker_list->states[i].end_row);
-    }
-    */
     return rows_per_worker;
 }
 
@@ -274,17 +261,14 @@ void simulate_life_parallel(int threads, LifeBoard *state, int steps) {
 
     init_gate(&start_gate, threads + 1, 'S');
     init_gate(&finish_gate, threads + 1, 'F');
-    int rows_for_main = init_workers(&workers_list, next_board, state, threads);
+    init_workers(&workers_list, threads);
+    int rows_for_main = distribute_work(&workers_list, next_board, state, threads);
     worker_state_t main_worker_state = {next_board, state, 1, 1 + rows_for_main};
 
-    //printf("Main processes slice %d-%d\n", 1, 1 + rows_for_main);
-
-    //exit(0);
     while (step < steps) {
 
         // gate 1
         gate_wait(&start_gate);
-        // TODO: use main thread to perform calculations on the board along with workers
 
         calculate_slice(
             next_board, 
