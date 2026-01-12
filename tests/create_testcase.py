@@ -2,10 +2,10 @@
 from random import random
 from os import path
 
-width = 10006
-height = 18
-file_name = "10003x18"
-threshold = 0.7
+width  = 4505
+height = 1008
+file_name = "4505x1008"
+threshold = 0.85
 
 rows = ["." * width]
 
