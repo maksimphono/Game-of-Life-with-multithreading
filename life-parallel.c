@@ -2,6 +2,8 @@
 #include <pthread.h>
 #include <semaphore.h>
 
+// reference: https://github.com/dogmelons/Threaded-Game-Of-Life
+
 typedef enum {False, True} boolean;
 
 typedef struct cyclic_barrier_t {
@@ -229,4 +231,33 @@ void sync_board() {
 void destroy_workers(pthread_t* workers, worker_param_t* parameters) {
     free(workers);
     free(parameters);
+}
+
+void simulate_life_parallel(int number_of_threads, LifeBoard* initial_state, int steps) {
+    generations = steps;
+    primary_board = initial_state;
+    columns = initial_state->width;
+    rows = initial_state->height;
+    size = columns * rows;
+
+    secondary_board = create_life_board(primary_board->width, primary_board->height);
+
+    cyclic_barrier_t barrier;
+    cyclic_barrier_init(&barrier, NULL, NULL, number_of_threads, sync_board);
+
+    pthread_t* workers = (pthread_t*)malloc(number_of_threads * sizeof(pthread_t));
+    worker_param_t* parameters = (worker_param_t*)malloc(number_of_threads * sizeof(worker_param_t));
+
+    split_board(parameters, number_of_threads, rows, columns);
+
+    workers_init(workers, parameters, &barrier, number_of_threads);
+
+    for (int i = 0; i < number_of_threads; i++) {
+        pthread_join(workers[i], NULL);
+    }
+
+    cyclic_barrier_destroy(&barrier);
+
+    destroy_life_board(secondary_board);
+    destroy_workers(workers, parameters);
 }
