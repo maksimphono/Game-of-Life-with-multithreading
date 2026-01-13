@@ -145,3 +145,60 @@ int split_board(worker_param_t* params, int workers_num, int rows, int columns) 
 
     return 0;
 }
+
+
+int rows = 0;
+int columns = 0;
+int generations = 0;
+int size = 0;
+LifeBoard* primary_board;
+LifeBoard* secondary_board;
+
+// processes a single step, used in the workers
+void process_step(worker_param_t* params) {
+    // Calculate the actual safe inner range for this thread
+    int min_row = 1;
+    int max_row = rows - 2;
+    int min_col = 1;
+
+    int start_row = params->start_row;
+    int start_col = params->start_col;
+
+    // Clip to inner region
+    if (min_row > start_row) 
+        start_row = min_row;
+
+    if (min_col > start_col) 
+        start_col = min_col;
+
+    // Compute how many rows/columns this thread actually processes
+    int rows_to_process = params->length / columns;  // approximate
+    int end_row = start_row + rows_to_process;
+    if (end_row > max_row + 1) end_row = max_row + 1;
+
+    // loop ignoring borders
+    for (int r = start_row; r < end_row; r++) {
+        for (int c = 1; c < columns - 1; c++) {
+            int index = r * columns + c;
+
+            int neighbors = 0;
+
+            // row above
+            neighbors += primary_board->cells[index - columns + 1];
+            neighbors += primary_board->cells[index - columns];
+            neighbors += primary_board->cells[index - columns - 1];
+
+            // this row
+            neighbors += primary_board->cells[index + 1];
+            neighbors += primary_board->cells[index];
+            neighbors += primary_board->cells[index - 1];
+
+            // row below
+            neighbors += primary_board->cells[index + columns + 1];
+            neighbors += primary_board->cells[index + columns];
+            neighbors += primary_board->cells[index + columns - 1];
+
+            secondary_board->cells[index] = ((neighbors == 3) || (neighbors == 4 && primary_board->cells[index] == 1)) ? 1 : 0;
+        }
+    }
+}
