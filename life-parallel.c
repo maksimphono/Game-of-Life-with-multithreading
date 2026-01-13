@@ -233,7 +233,35 @@ void destroy_workers(pthread_t* workers, worker_param_t* parameters) {
     free(parameters);
 }
 
+
+void my_simulate_life_serial(LifeBoard *state, int steps) {
+    if (steps == 0) return;
+    LifeBoard *next_state = create_life_board(state->width, state->height);
+    if (next_state == NULL) {
+        fprintf(stderr, "Failed to allocate memory for next state.\n");
+        return;
+    }
+    for (int step = 0; step < steps; step++) {
+        for (int y = 1; y < state->height - 1; y++) {
+            for (int x = 1; x < state->width - 1; x++) {
+                int live_neighbors = count_live_neighbors(state, x, y);
+                LifeCell current_cell = at(state, x, y);
+                LifeCell new_cell = (live_neighbors == 3) || (live_neighbors == 4 && current_cell == 1) ? 1 : 0;
+                set_at(next_state, x, y, new_cell);
+            }
+        }
+        swap(state, next_state);
+    }
+    destroy_life_board(next_state);
+}
+
 void simulate_life_parallel(int number_of_threads, LifeBoard* initial_state, int steps) {
+    if (initial_state->width - 2 < number_of_threads && initial_state->height - 2 < number_of_threads) {
+        // the board is too small, thread creation will introduce overhead -> just do it with serial
+        my_simulate_life_serial(initial_state, steps);
+        return;
+    }
+
     generations = steps;
     primary_board = initial_state;
     columns = initial_state->width;
