@@ -202,3 +202,31 @@ void process_step(worker_param_t* params) {
         }
     }
 }
+
+void* worker_function(void* args) {
+    worker_param_t* params = (worker_param_t*)args;
+
+    for (int step = 0; step < generations; step++) {
+        process_step(params);
+
+        cyclic_barrier_await(params->barrier);
+    }
+
+    return NULL;
+}
+
+void workers_init(pthread_t* workers, worker_param_t* parameters, cyclic_barrier_t* barrier, int number_of_threads) {
+    for (int i = 0; i < number_of_threads; i++) {
+        parameters[i].barrier = barrier;
+        pthread_create(&workers[i], NULL, worker_function, &parameters[i]);
+    }
+}
+
+void sync_board() {
+    swap(primary_board, secondary_board);
+}
+
+void destroy_workers(pthread_t* workers, worker_param_t* parameters) {
+    free(workers);
+    free(parameters);
+}
