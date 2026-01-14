@@ -20,8 +20,8 @@ int main(int argc, char** argv) {
     FILE* in = fopen(input_file, "r");
     read_life_board(in, board);
     fclose(in);
-    //simulate_life_serial(board, steps);
-    simulate_life_parallel(10, board, steps);
+    simulate_life_serial(board, steps);
+    //simulate_life_parallel(10, board, steps);
     print_life_board(board);
     destroy_life_board(board);
     return 0;

@@ -1,8 +1,10 @@
 #ifndef LIFE_H_
 #define LIFE_H_
 
-#include<stdio.h>
-#include<stdlib.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef enum {False, True} boolean;
 
 typedef unsigned char LifeCell;
 
