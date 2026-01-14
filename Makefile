@@ -44,11 +44,11 @@ life-tsan: main-tsan.o life-tsan.o life-parallel-tsan.o life-serial-tsan.o
 clean:
 	rm -f *.o life life-asan life-tsan
 
-p:
-	gcc -Wall -Wextra -Werror -pedantic ./main.c ./life.c ./life-parallel.c -o parallel
-
-s:
+serial:
 	gcc ./main.c ./life.c ./life-serial.c -o serial
+
+parallel:
+	gcc ./main.c ./life.c ./life-parallel.c ./workers.c ./cyclic_barrier.c -o parallel
 
 mem:
 	gcc -Wall -Wextra -Werror -pedantic -g ./main.c ./life.c ./life-parallel.c -o parallel_mem
