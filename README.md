@@ -2,6 +2,16 @@
 
 * Implementation inspired by [Threaded-Game-Of-Life by dogmelons](https://github.com/dogmelons/Threaded-Game-Of-Life)
 
+# Simple usage:
+After cloning run:
+```bash
+make parallel
+```
+This will build `parallel` executable, run it providing number of steps and input file:
+```bash
+./parallel 100 ./input/make-a 
+```
+
 ## Introduction
 
 This project is my implementation of Game of Life with multithreading. Initially is my university project for OS class. This implementation utilizes 2 GoL boards, that are swapped on each iteration, multiple threads (can be specified) and cyclic barriers to sinchronize the threads.
