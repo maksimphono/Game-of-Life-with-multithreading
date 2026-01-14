@@ -1,3 +1,6 @@
+# Simple script to create a test board with give dimensions randomly
+
+
 #from numpy import array, random
 from random import random
 from os import path
