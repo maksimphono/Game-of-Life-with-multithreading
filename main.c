@@ -3,6 +3,8 @@
 #include <string.h>
 #include "life.h"
 
+#define NUMBER_OF_THREADS 8
+
 int main(int argc, char** argv) {
     int steps = 0;
     char input_file[256];
@@ -20,8 +22,8 @@ int main(int argc, char** argv) {
     FILE* in = fopen(input_file, "r");
     read_life_board(in, board);
     fclose(in);
-    simulate_life_serial(board, steps);
-    //simulate_life_parallel(10, board, steps);
+    //simulate_life_serial(board, steps);
+    simulate_life_parallel(NUMBER_OF_THREADS, board, steps);
     print_life_board(board);
     destroy_life_board(board);
     return 0;
