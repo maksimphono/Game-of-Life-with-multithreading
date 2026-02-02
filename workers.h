@@ -1,5 +1,5 @@
-#ifndef WORKERS_H_
-#define WORKERS_H_
+#ifndef _WORKERS_H_
+#define _WORKERS_H_
 
 #include "cyclic_barrier.h"
 #include <stdlib.h>

@@ -1,9 +1,11 @@
 # Threaded Game of life
 
+***Last update: 02.02.2026***
+
 * Implementation inspired by [Threaded-Game-Of-Life by dogmelons](https://github.com/dogmelons/Threaded-Game-Of-Life)
 
-# Simple usage:
-After cloning run:
+## 🥢 Simple usage:
+Clone this repository and run:
 ```bash
 make parallel
 ```
@@ -11,7 +13,32 @@ This will build `parallel` executable, run it providing number of steps and inpu
 ```bash
 ./parallel 100 ./input/make-a 
 ```
+This will calculate 100 steps of GoL for initial state specified in `./input/make-a` file.
 
+## 🎞️ Input file:
+In the input file first specify the board dimensions (width and height), then create the board, marking **dead** cells as `.` and **alive** cells as `o`. I suggest making script, that will create the board automatically (see `tests/create_testcase.py`). 
+* Example of input file:
+```bash
+10 10
+..........
+....o.o...
+....oo....
+.o..o.....
+..o.....o.
+........o.
+..ooo..o..
+...o......
+.o....o.o.
+..........
+```
+🛈 Note, that borders must always be `dead`
+***For more input files please refer to input/ directory***
+
+## 📚 Requirements
+1. GNU Make 4.4.1 or later
+2. gcc 13 or later
+
+--
 ## Introduction
 
 This project is my implementation of Game of Life with multithreading. Initially is my university project for OS class. This implementation utilizes 2 GoL boards, that are swapped on each iteration, multiple threads (can be specified) and cyclic barriers to sinchronize the threads.
@@ -51,5 +78,5 @@ For efficiency, a check determines if the board is too small (inner dimensions l
 
 ### Conclusion
 
-The implementation effectively parallelizes GoL using pthreads and cyclic barriers, focusing on inner cell computations while enforcing dead borders. Core features like workload slicing, synchronization, and fallback ensure scalability and efficiency. The logic prioritizes simplicity and correctness, adapting repository ideas to bounded grids. Potential improvements could include dynamic axis selection or work-stealing for better balance, but the current design suits moderate-sized boards well. Overall, it demonstrates sound multithreading principles in C.
+The implementation effectively parallelizes GoL using pthreads and cyclic barriers, focusing on inner cell computations while enforcing dead borders. Core features like workload slicing, synchronization, and fallback ensure scalability and efficiency. The logic prioritizes simplicity and correctness, adapting repository ideas to bounded grids. Potential improvements could include dynamic axis selection or work-stealing for better balance, but the current design suits moderate-sized boards well. Overall, it demonstrates multithreading principles in C.
 

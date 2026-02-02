@@ -1,5 +1,5 @@
-#ifndef LIFE_H_
-#define LIFE_H_
+#ifndef _LIFE_H_
+#define _LIFE_H_
 
 #include <stdio.h>
 #include <stdlib.h>

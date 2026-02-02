@@ -1,5 +1,5 @@
-#ifndef CYCLIC_BARRIER_H_
-#define CYCLIC_BARRIER_H_
+#ifndef _CYCLIC_BARRIER_H_
+#define _CYCLIC_BARRIER_H_
 
 #include <pthread.h>
 

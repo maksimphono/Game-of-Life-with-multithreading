@@ -1,6 +1,3 @@
--include conf/lab.mk
--include conf/info.mk
-
 CC=gcc-13
 CFLAGS=-std=gnu11 -g -O3 -pthread -Wall -Werror -pedantic
 # ASAN = Address SANitizer
@@ -8,7 +5,24 @@ CFLAGS_ASAN=-std=gnu11 -g -Og -pthread -fsanitize=address -Wall -Werror -pedanti
 # TSAN = Thread SANitizer
 CFLAGS_TSAN=-std=gnu11 -g -Og -pthread -fsanitize=thread -fsanitize=undefined -Wall -Werror -pedantic
 
+# Main compile scripts:
+clean:
+	rm -f *.o parallel life life-asan life-tsan
+
+serial:
+	gcc ./main.c ./life.c ./life-serial.c -o serial
+
+parallel:
+	gcc ./cyclic_barrier.c ./split_board.c ./life.c ./life-parallel.c ./workers.c ./main.c -o parallel
+
+mem:
+	gcc -Wall -Wextra -Werror -pedantic -g ./cyclic_barrier.c ./split_board.c ./life.c ./life-parallel.c ./workers.c ./main.c -o parallel_mem
+	valgrind --leak-check=full --show-leak-kinds=all ./parallel_mem 8 ./input/4505x1008 1> /dev/null 2> valgrind_report.txt
+	rm parallel_mem
+
 all: life life-asan life-tsan
+
+
 
 %-asan.o: %.c
 	$(CC) -c $(CFLAGS_ASAN) -o $@ $<
@@ -40,50 +54,3 @@ life-asan: main-asan.o life-asan.o life-parallel-asan.o life-serial-asan.o
 
 life-tsan: main-tsan.o life-tsan.o life-parallel-tsan.o life-serial-tsan.o
 	$(CC) $(CFLAGS_TSAN) -o $@ $^ -lpthread
-
-clean:
-	rm -f *.o life life-asan life-tsan
-
-serial:
-	gcc ./main.c ./life.c ./life-serial.c -o serial
-
-parallel:
-	gcc ./main.c ./life.c ./life-parallel.c ./workers.c ./cyclic_barrier.c -o parallel
-
-mem:
-	gcc -Wall -Wextra -Werror -pedantic -g ./main.c ./life.c ./life-parallel.c -o parallel_mem
-	valgrind --leak-check=full --show-leak-kinds=all ./parallel_mem 8 ./input/4505x1008 1> /dev/null 2> valgrind_report.txt
-	rm parallel_mem
-
-STYLE=\033[1;31m
-NC=\033[0m
-
-info-check:
-	@if test -z "$(SID)"; then \
-		echo "${STYLE}Please set SID in conf/info.mk${NC}"; \
-		false; \
-	fi
-	@if test -z "`echo $(SID) | grep '^[0-9]\{9\}$$'`"; then \
-		echo -n "${STYLE}Your SID (${SID}) does not appear to be correct. Continue? [y/N]${NC} "; \
-		read -p "" r; \
-		test "$$r" = y; \
-	fi
-	@if test -z "$(TOKEN)"; then \
-		echo "${STYLE}Please set TOKEN in conf/info.mk${NC}"; \
-		false; \
-	fi
-
-submit: clean info-check
-	curl -F "token=${TOKEN}" -F "lab_num=${LAB_NUM}" -F "file=@life-parallel.c" http://114.212.81.7:9999/upload_code
-
-report: info-check
-	@if ! test -f $(SID).pdf; then \
-		echo "${STYLE}Please put your report in a file named $(SID).pdf${NC}"; \
-		false; \
-	fi
-	curl -F "token=${TOKEN}" -F "lab_num=${LAB_NUM}" -F "file=@${SID}.pdf" http://114.212.81.7:9999/upload_report
-
-score: info-check
-	curl "http://114.212.81.7:9999/download?token=${TOKEN}&lab_num=${LAB_NUM}"
-
-.PHONY: all clean info-check submit report score
